@@ -1,5 +1,6 @@
 from smart_repo_analyzer import build_index, search_relevant_files
 from ai_agent import ai_reasoning
+import json
 
 print("\n=== Autonomous Incident-to-Fix Engineering Agent ===\n")
 
@@ -25,25 +26,35 @@ file = files[0]
 
 print("\n[Agent] Candidate file detected:", file)
 
-# Read code
 with open(file, "r", encoding="utf8", errors="ignore") as f:
     code = f.read()
 
 print("[Agent] Performing AI-based analysis...")
 
-# AI reasoning
 result = ai_reasoning(ticket, code)
+
+# 🔥 FIX HANDLING
+if isinstance(result, str):
+    try:
+        result = json.loads(result)
+    except:
+        result = {
+            "confidence": "N/A",
+            "risk": "N/A",
+            "root_cause": result,
+            "fix": result
+        }
 
 print("\n=== INCIDENT RESOLUTION REPORT ===\n")
 
 print("Root Cause:")
-print(result["root_cause"])
+print(result.get("root_cause", "N/A"))
 
 print("\nSuggested Fix:")
-print(result["fix"])
+print(result.get("fix", "N/A"))
 
-print("\nConfidence Score:", result["confidence"])
-print("Risk Level:", result["risk"])
+print("\nConfidence Score:", result.get("confidence", "N/A"))
+print("Risk Level:", result.get("risk", "N/A"))
 
 print("\nExecution Timeline:")
 print("00:00 Ticket received")
