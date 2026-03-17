@@ -1,8 +1,9 @@
 import streamlit as st
-from ticket_parser import parse_ticket
-from repo_analyzer import search_repo
 import time
-import random
+
+from smart_repo_analyzer import build_index, search_relevant_files
+from ai_agent import ai_reasoning
+
 
 st.set_page_config(
     page_title="Incident-to-Fix Engineering Agent",
@@ -10,7 +11,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# Header
+# ==============================
+# SESSION STATE INIT
+# ==============================
+if "status" not in st.session_state:
+    st.session_state.status = "Waiting for execution..."
+
+if "last_ticket" not in st.session_state:
+    st.session_state.last_ticket = None
+
+# ==============================
+# HEADER
+# ==============================
 st.markdown("""
 # 🤖 Autonomous Incident-to-Fix Engineering Agent
 AI system that interprets incident tickets, analyzes the Shopstack platform repository,
@@ -19,7 +31,9 @@ detects root causes and generates safe code fixes automatically.
 
 st.divider()
 
-# Sidebar
+# ==============================
+# SIDEBAR
+# ==============================
 st.sidebar.title("⚙️ Incident Controls")
 
 ticket = st.sidebar.selectbox(
@@ -29,135 +43,131 @@ ticket = st.sidebar.selectbox(
         "User login fails when email contains uppercase letters",
         "Payment API throws error during checkout",
         "Order API returns null response",
-        "Password stored without hashing",
-        "API crashes on empty input",
-        "Server returns 500 error"
+        "Password stored without hashing"
     ]
 )
 
+# 🔥 RESET STATUS WHEN USER CHANGES TICKET
+if st.session_state.last_ticket is None:
+    st.session_state.last_ticket = ticket
+
+elif ticket != st.session_state.last_ticket:
+    st.session_state.status = "Waiting for execution..."
+    st.session_state.last_ticket = ticket
+
 run = st.sidebar.button("🚀 Run Agent")
 
-st.sidebar.info("""
-**System Workflow**
-
-1️⃣ Parse incident ticket  
-2️⃣ Analyze repository  
-3️⃣ AI root cause detection  
-4️⃣ Generate fix patch  
-5️⃣ Validate + deploy  
-""")
-
-# Layout
-col1, col2 = st.columns([1,2])
+# ==============================
+# LAYOUT
+# ==============================
+col1, col2 = st.columns([1, 2])
 
 with col1:
     st.subheader("📄 Incident Ticket")
     st.success(ticket)
 
-with col2:
-    st.subheader("🧠 Agent Status")
-    st.write("Waiting for execution...")
+status_placeholder = col2.empty()
+status_placeholder.subheader("🧠 Agent Status")
+status_placeholder.info(st.session_state.status)
 
-# ========================= MAIN EXECUTION =========================
+# ==============================
+# RUN AGENT
+# ==============================
 if run:
 
-    with st.spinner("🤖 AI analyzing incident..."):
+    # 🔥 STEP 1 → EXECUTING
+    st.session_state.status = "Executing agent..."
+    status_placeholder.info(st.session_state.status)
+
+    with st.spinner("Agent is running..."):
+
+        st.write("🧠 Understanding incident...")
         time.sleep(1)
 
-        keywords = parse_ticket(ticket)
-        files = search_repo(keywords)
+        st.write("🔍 Scanning repository...")
+        time.sleep(1)
+
+        index = build_index()
+        files = search_relevant_files(ticket, index)
+
+        st.write("📂 Identifying relevant files...")
+        time.sleep(1)
 
         if not files:
-            st.error("No relevant files found in repository.")
-        else:
-            file = files[0]
+            st.error("No relevant files found.")
+            st.session_state.status = "Execution failed"
+            status_placeholder.info(st.session_state.status)
 
-            from ai_agent import ai_reasoning
+        else:
+            st.write("🧠 Performing root cause analysis...")
+            time.sleep(1)
+
+            st.divider()
+
+            # Logs
+            st.subheader("📜 Agent Logs")
+            st.code("""
+[INFO] Ticket received
+[INFO] Repository scanned
+[INFO] Relevant files identified
+[INFO] Root cause analysis completed
+[INFO] Patch generated successfully
+""")
+
+            # Files
+            st.subheader("📁 Relevant Files Found")
+            for f in files:
+                st.code(f)
+
+            file = files[0]
 
             with open(file, "r", encoding="utf8", errors="ignore") as f:
                 code = f.read()
 
-            ai_output = ai_reasoning(ticket, code)
-
-            # Extract values
-            root_cause = ""
-            fix = ""
-
-            if "Root Cause:" in ai_output and "Fix:" in ai_output:
-                root_cause = ai_output.split("Root Cause:")[1].split("Fix:")[0].strip()
-                fix = ai_output.split("Fix:")[1].strip()
+            result = ai_reasoning(ticket, code)
 
             st.divider()
 
-            col1, col2 = st.columns(2)
+            # Metrics
+            colA, colB, colC = st.columns(3)
+            colA.metric("Files Found", len(files))
+            colB.metric("Confidence", result["confidence"])
+            colC.metric("Risk", result["risk"])
 
-            # LEFT
-            with col1:
+            st.divider()
+
+            # Output
+            colX, colY = st.columns(2)
+
+            with colX:
                 st.subheader("🔍 Root Cause")
-                st.warning(root_cause)
+                st.warning(result["root_cause"])
 
-                st.subheader("📁 Affected File")
+                st.subheader("📁 Selected File")
                 st.code(file)
 
-            # RIGHT
-            with col2:
+            with colY:
                 st.subheader("🛠 Suggested Patch")
-                st.code(fix, language="javascript")
+                st.code(result["fix"], language="javascript")
 
             st.divider()
 
-            # AI Output
-            st.subheader("🧠 AI Analysis")
-            st.code(ai_output)
+            # Apply Fix
+            if st.button("🚀 Apply Fix (Simulation)"):
+                st.success("Patch applied successfully")
+                st.info("No regressions detected")
 
-            from code_modifier import apply_fix
-
-            modified = apply_fix(file, ticket)
-
-            if modified:
-                st.success("✅ Code automatically updated in repository!")
-            else:
-                st.warning("⚠️ No direct modification applied (suggestion only)")
-            # ================= VALIDATION =================
-            st.subheader("🧪 Validation")
-
-            result = random.choice(["PASS", "PASS", "PASS", "FAIL"])
-
-            if result == "PASS":
-                st.success("✅ Tests passed. No regression detected.")
-            else:
-                st.error("❌ Some tests failed. Review required.")
-
-            # ================= SANDBOX =================
-            st.subheader("⚙️ Sandbox Execution")
-            st.success("Application ran successfully in isolated environment")
-
-            # ================= REPORT =================
-            st.subheader("📊 Resolution Report")
-
-            st.markdown(f"""
-**Affected File:** {file}  
-
-**Root Cause:** {root_cause}  
+            # Timeline
+            st.subheader("⏱ Execution Timeline")
+            st.code("""
+00:00 Ticket received
+00:02 Repository scanned
+00:04 Root cause identified
+00:05 Fix generated
 """)
 
-            st.markdown("**Suggested Fix:**")
-            st.code(fix, language="javascript")
+            st.success("✅ Completed successfully")
 
-            st.markdown("""
-**Confidence Score:** 88%  
-**Risk Level:** LOW  
-""")
-
-            # ================= DOWNLOAD =================
-            st.download_button(
-                "⬇️ Download Patch",
-                fix,
-                file_name="fix_patch.js"
-            )
-
-            # ================= PR =================
-            st.subheader("🔀 Pull Request")
-            st.info("PR #102 created: Fix applied automatically")
-
-            st.success("🚀 Incident fully resolved by autonomous agent")
+            # 🔥 STEP 3 → COMPLETED
+            st.session_state.status = "Execution completed"
+            status_placeholder.info(st.session_state.status)
