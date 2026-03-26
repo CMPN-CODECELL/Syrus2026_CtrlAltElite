@@ -1,73 +1,95 @@
 def ai_reasoning(ticket, code):
 
     ticket = ticket.lower()
+    code = code.lower()
+
+    match_score = 0
+    root_cause = ""
+    fix = ""
+    explanation = ""
 
     # CART
-    if "cart" in ticket or "checkout" in ticket:
-        return """
-Root Cause:
-The system does not validate whether the cart is empty before checkout.
+    if "cart" in ticket:
+        match_score += 2
+        if "cart" in code:
+            match_score += 2
 
-Fix:
-if(cart.length === 0){
+        root_cause = "Cart is not validated before checkout."
+        fix = """if(cart.length === 0){
     return res.status(400).json({error:"Cart is empty"})
-}
-"""
+}"""
+        explanation = "Detected missing cart validation before checkout."
 
     # LOGIN
     elif "login" in ticket or "email" in ticket:
-        return """
-Root Cause:
-Email comparison is case-sensitive causing login failures.
+        match_score += 2
+        if "email" in code:
+            match_score += 2
 
-Fix:
-email = email.toLowerCase()
-storedEmail = storedEmail.toLowerCase()
-"""
+        root_cause = "Email comparison is case-sensitive."
+        fix = """email = email.toLowerCase()
+storedEmail = storedEmail.toLowerCase()"""
+        explanation = "Uppercase email mismatch causes login failure."
 
     # PAYMENT
     elif "payment" in ticket:
-        return """
-Root Cause:
-Payment status is not validated before processing.
+        match_score += 2
+        if "payment" in code:
+            match_score += 2
 
-Fix:
-if(payment.status !== "success"){
+        root_cause = "Payment status is not validated."
+        fix = """if(payment.status !== "success"){
     return res.status(400).json({error:"Payment failed"})
-}
-"""
+}"""
+        explanation = "Missing payment success validation."
 
     # ORDER
     elif "order" in ticket:
-        return """
-Root Cause:
-Order validation is missing or incomplete.
+        match_score += 2
+        if "order" in code:
+            match_score += 2
 
-Fix:
-if(!order){
+        root_cause = "Order validation missing."
+        fix = """if(!order){
     return res.status(404).json({error:"Order not found"})
-}
-"""
+}"""
+        explanation = "Order existence not checked."
 
     # PASSWORD
     elif "password" in ticket:
-        return """
-Root Cause:
-Password is stored without hashing.
+        match_score += 2
+        if "password" in code:
+            match_score += 2
 
-Fix:
-const bcrypt = require('bcrypt')
-password = await bcrypt.hash(password, 10)
-"""
+        root_cause = "Password stored without hashing."
+        fix = """const bcrypt = require('bcrypt')
+password = await bcrypt.hash(password, 10)"""
+        explanation = "Password should be hashed before storing."
 
-    # 🔥 SMART FALLBACK (IMPORTANT)
     else:
-        return f"""
-Root Cause:
-The issue appears to be a general validation or logical error based on the incident description:
-"{ticket}"
+        match_score = 1
+        root_cause = "Generic issue detected."
+        fix = "// Add validation"
+        explanation = "Fallback reasoning."
 
-Fix:
-Add proper input validation, error handling, and logging in the affected module.
-Check for null values, invalid inputs, and missing conditions.
-"""
+    # 🔥 CONFIDENCE CALCULATION
+    if match_score >= 4:
+        confidence = 0.90
+        risk = "Low"
+    elif match_score == 3:
+        confidence = 0.80
+        risk = "Low"
+    elif match_score == 2:
+        confidence = 0.70
+        risk = "Medium"
+    else:
+        confidence = 0.60
+        risk = "High"
+
+    return {
+        "root_cause": root_cause,
+        "fix": fix,
+        "confidence": confidence,
+        "risk": risk,
+        "explanation": explanation
+    }
